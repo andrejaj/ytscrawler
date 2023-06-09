@@ -19,11 +19,11 @@ class CrawlBase:
             "timeout": "20",
             "verify": "False"
         }
-    def encode_data(self, content):
-        if content is not None:
-            return content.encode("ISO-8859-1").decode("utf-8", "ignore")
-        else:
-            return None
+    # def encode_data(self, content):
+    #     if content is not None:
+    #         return content.encode("ISO-8859-1").decode("utf-8", "ignore")
+    #     else:
+    #         return None
     def normalized_url(self, url):
         return urllib.parse.urljoin(self.base_url, url)
     def download(self, url):
@@ -118,26 +118,32 @@ class Yts(CrawlBase):
                   movie["torrent_1080"] = movie_data['torrent_1080']
 
                   movie['description'] = imdb_data['description']
-                  movie['genre'] = imdb_data['genre']
+                  movie['genres'] = imdb_data['genre']
                   movie['imdb_rating'] = imdb_data['imdb_rating']
-                  movie['releasedate'] = imdb_data['releasedate']
+                  movie['year'] = imdb_data['releasedate']
                   movie['language'] = imdb_data['language']
                   movie['countryOrigin'] = imdb_data['countryOrigin']
+                  
+                #imdb rating  
+                if not skip_movie and self.options["imdb_rating_gt"] and movie["imdb_rating"] < float(self.options["imdb_rating_gt"]):
+                    skip_movie = True
 
-                #     if self.options["imdb_rating_gt"] and movie["imdb_rating"] < float(self.options["imdb_rating_gt"]):
-                #         skip_movie = True
-                #     if not skip_movie and self.options["exclude_genres"] and isinstance(self.options["exclude_genres"], list):
-                #         for genre in movie["genres"]:
-                #             if genre in self.options["exclude_genres"]:
-                #                 skip_movie = True
-                #                 break
-                #     if not skip_movie and self.options["year_gt"] and movie["year"] < int(self.options["year_gt"]):
-                #         skip_movie = True
-                #     if not skip_movie:
-                #         movie["rt_cirtic_rating"] = self.parse_page(movie["link"])
-                #         skip_movie = True if movie["rt_cirtic_rating"] < float(self.options["rt_cirtic_rating_gt"]) else False
+                #imdb genres     
+                if not skip_movie and self.options["exclude_genres"] and isinstance(self.options["exclude_genres"], list):
+                    for genre in movie["genres"]:
+                        if genre in self.options["exclude_genres"]:
+                            skip_movie = True
+                            break
 
-                  self.movies[movie["title"]] = movie
+                #imdb year
+                if not skip_movie and self.options["year_gt"] and int(movie["year"]) < int(self.options["year_gt"]):
+                    skip_movie = True
+
+                #imdb language
+                # if not skip_movie and self.options["exclude_languages"]:
+                
+                if not skip_movie:
+                    self.movies[movie["title"]] = movie
         return
   
     def get_movies(self):
