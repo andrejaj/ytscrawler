@@ -19,6 +19,7 @@ class CrawlBase:
             "timeout": "20",
             "verify": "False"
         }
+        self.countryLanguage = { "Spain" : "Spanish", "Italy" : "Italian", "USA" : "English", "Brazil" : "Portuguese", "Portugal" : "Portuguese", "England" : "English"}
     # def encode_data(self, content):
     #     if content is not None:
     #         return content.encode("ISO-8859-1").decode("utf-8", "ignore")
@@ -63,10 +64,25 @@ class CrawlBase:
         data = {}
         soup = BeautifulSoup(self.download(url), 'html.parser')
 
-        language = soup.find('a', href=re.compile("primary_language")).text
+        try:
+            language = soup.find('a', href=re.compile("primary_language")).text
+        except:
+            language = None
+            print('error in processing language: ' + url)
         releaseDate = soup.find('a', href=re.compile("releaseinfo")).text
-        countryOrigin = soup.find('a', href=re.compile("country_of_origin")).text
+        try:
+            countryOrigin = soup.find('a', href=re.compile("country_of_origin")).text
+        except:
+            countryOrigin = None
+            print('error in processing country of origin: ' + url)
 
+        #note: here if it fails for langiage country of origin can be taken
+        try:
+            if language is None and not countryOrigin is None:
+                language = self.countryLanguage[countryOrigin]
+        except:
+            print('error in mapping country to language: ' + url)
+        
         script  = soup.find_all("script", {"type":"application/ld+json"})[0]
         data = json.loads(script.text)
 
@@ -90,6 +106,7 @@ class Yts(CrawlBase):
         self.options["rt_critic_rating_gt"] = yts_options.get("rt_critic_rating_gt")
         self.options["year_gt"] = yts_options.get("year_gt")
         self.options["exclude_genres"] = yts_options.get("exclude_genres", ["Documentary", "Romance", "Talk-Show", "Reality-TV", "News", "Musical", "Music", "Animation", "Western", "Short", "Sport"])
+        self.options["include_languages"] = yts_options.get("include_languages", ["English", "Spanish", "Italian", "Portuguese"])
     def parse(self):
         for page_number in range(self.options["from"], self.options["to"] + 1):
             url = f"{self.base_url}?page={page_number}"
@@ -140,8 +157,11 @@ class Yts(CrawlBase):
                     skip_movie = True
 
                 #imdb language
-                # if not skip_movie and self.options["exclude_languages"]:
-                
+                if not skip_movie and self.options["include_languages"]: # and isinstance(self.options["include_genres"], list):
+                    if movie['language'] not in self.options["include_languages"]:
+                        skip_movie = True
+                        break
+                    
                 if not skip_movie:
                     self.movies[movie["title"]] = movie
         return
@@ -149,6 +169,14 @@ class Yts(CrawlBase):
     def get_movies(self):
         return self.movies
 
-yts = Yts("https://yts.rs/browse-movies", {"to" : 2, "imdb_rating_gt": 5, "year_gt": 2021})
+yts = Yts("https://yts.rs/browse-movies", { "imdb_rating_gt": 5, "year_gt": 2023}) #"to" : 2,
 yts.parse()
-print(yts.get_movies())
+
+movies = yts.get_movies()
+#print(movies)
+
+# output 
+with open("Movies.json", 'wt') as f:
+    json.dump(movies, f)  
+# Closing file
+f.close()
