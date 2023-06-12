@@ -55,9 +55,14 @@ class CrawlBase:
             urls.add(link.get('href'))
        
         items = list(urls)
-        data["torrent_720"] = items[0]
-        data["torrent_1080"] = items[1]
-
+        try:
+            data["torrent_720"] = items[0]
+        except:
+            data["torrent_720"] = None
+        try:
+            data["torrent_1080"] = items[1]
+        except:
+            data["torrent_1080"] = None
         return data
     
     def page_imdb_details(self, url):
@@ -69,7 +74,10 @@ class CrawlBase:
         except:
             language = None
             print('error in processing language: ' + url)
-        releaseDate = soup.find('a', href=re.compile("releaseinfo")).text
+        try:
+            releaseDate = soup.find('a', href=re.compile("releaseinfo")).text
+        except:
+            print('error in processing release date: ' + url)
         try:
             countryOrigin = soup.find('a', href=re.compile("country_of_origin")).text
         except:
@@ -87,12 +95,17 @@ class CrawlBase:
         data = json.loads(script.text)
 
         movie_data = {}
-        movie_data['description'] = data['description']
-        movie_data['genre'] = data['genre']
-        movie_data['imdb_rating'] = data['aggregateRating']['ratingValue']
-        movie_data['releasedate'] = releaseDate
-        movie_data['language'] = language
-        movie_data['countryOrigin'] = countryOrigin
+
+        try:
+            movie_data['description'] = data['description']
+            movie_data['genre'] = data['genre']
+            movie_data['imdb_rating'] = data['aggregateRating']['ratingValue']
+            movie_data['releasedate'] = releaseDate
+            movie_data['language'] = language
+            movie_data['countryOrigin'] = countryOrigin
+        except:
+          movie_data = {}
+          print('failed to parse data ' + url)  
         return movie_data
 
 class Yts(CrawlBase):
@@ -119,7 +132,7 @@ class Yts(CrawlBase):
                 movie['title'] = item['item']['name']
                 movie['url'] = item['item']['url']
                 movie['image'] = item['item']['image']
-                print(movie)
+                #print(movie)
 
                 rg = re.compile(r'[^a-z](\d{4})[^a-z]', re.IGNORECASE)
                 match = rg.findall(movie['title'])
@@ -134,6 +147,9 @@ class Yts(CrawlBase):
                   movie["torrent_720"] = movie_data['torrent_720']
                   movie["torrent_1080"] = movie_data['torrent_1080']
 
+                  if not imdb_data:
+                    continue
+                  
                   movie['description'] = imdb_data['description']
                   movie['genres'] = imdb_data['genre']
                   movie['imdb_rating'] = imdb_data['imdb_rating']
@@ -157,19 +173,20 @@ class Yts(CrawlBase):
                     skip_movie = True
 
                 #imdb language
-                if not skip_movie and self.options["include_languages"]: # and isinstance(self.options["include_genres"], list):
+                if not skip_movie and self.options["include_languages"]:
                     if movie['language'] not in self.options["include_languages"]:
                         skip_movie = True
                         break
                     
                 if not skip_movie:
                     self.movies[movie["title"]] = movie
+                    print(movie["title"])
         return
   
     def get_movies(self):
         return self.movies
 
-yts = Yts("https://yts.rs/browse-movies", { "imdb_rating_gt": 5, "year_gt": 2023}) #"to" : 2,
+yts = Yts("https://yts.rs/browse-movies/2023/all/all/5/latest", { "imdb_rating_gt": 5, "year_gt": 2023}) 
 yts.parse()
 
 movies = yts.get_movies()
