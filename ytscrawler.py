@@ -37,8 +37,8 @@ class CrawlBase:
             soup = BeautifulSoup(self.download(url), "html.parser")
             script  = soup.find_all("script", {"type":"application/ld+json"})[1]
             data = json.loads(script.text)['itemListElement']
-        except Exception as error:
-            logger.error(f'processing page {url}', error)
+        except Exception:
+            logger.error(f"processing page {url}", exc_info=True)
 
         return data
     
@@ -66,8 +66,8 @@ class CrawlBase:
                 data["torrent_1080"] = items[1]
             except:
                 data["torrent_1080"] = None
-        except Exception as error:
-            logger.error(f'processing page details {url}', error)
+        except Exception:
+            logger.error(f"processing page details {url}", exc_info=True)
         return data
     
     def page_imdb_details(self, url):
@@ -92,9 +92,9 @@ class CrawlBase:
             movie_data['releasedate'] = releaseDate
             movie_data['language'] = language
             movie_data['countryOrigin'] = countryOrigin
-        except Exception as error:
+        except Exception:
           movie_data = None
-          logger.error(f'processing imdb data {url}', error)  
+          logger.error(f"processing imdb data {url}", exc_info=True)  
         return movie_data
 
 class Yts(CrawlBase):
@@ -107,7 +107,7 @@ class Yts(CrawlBase):
         self.options["imdb_rating_gt"] = yts_options.get("imdb_rating_gt")
         self.options["rt_critic_rating_gt"] = yts_options.get("rt_critic_rating_gt")
         self.options["year_gt"] = yts_options.get("year_gt")
-        self.options["exclude_genres"] = yts_options.get("exclude_genres", ["Documentary", "Romance", "Talk-Show", "Reality-TV", "News", "Musical", "Music", "Animation", "Western", "Short", "Sport"])
+        self.options["exclude_genres"] = yts_options.get("exclude_genres", ["Documentary", "Romance", "Talk-Show", "Reality-TV", "News", "Musical", "Music", "Animation", "Western", "Short", "Sport", "TV Special"])
         self.options["include_languages"] = yts_options.get("include_languages", ["English", "Spanish", "Italian", "Portuguese"])
     def parse(self):
         for page_number in range(self.options["from"], self.options["to"] + 1):
@@ -188,7 +188,7 @@ logger=logging.getLogger(__name__)
 
 years = [2020] #2020, 2021, 2022, 2023
 for year in years:
-    yts = Yts(f"https://yts.rs/browse-movies/{year}/all/all/5/latest", {"from": 58 ,"to":150, "imdb_rating_gt": 5, "year_gt": year}) #"from":27,
+    yts = Yts(f"https://yts.rs/browse-movies/{year}/all/all/5/latest", {"to":150, "imdb_rating_gt": 5, "year_gt": year})
     yts.parse()
 
     movies = yts.get_movies()
