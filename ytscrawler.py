@@ -5,6 +5,7 @@ import time
 import ssl
 import re
 import json
+import logging
 
 #genres = ['Action', 'Adventure', 'Animation', 'Biography', 'Comedy', 'Crime',
 #          'Documentary', 'Drama', 'Family', 'Fantasy', 'Film Noir', 'History',
@@ -19,7 +20,7 @@ class CrawlBase:
             "timeout": "20",
             "verify": "False"
         }
-        self.countryLanguage = { "Spain" : "Spanish", "Italy" : "Italian", "USA" : "English", "Brazil" : "Portuguese", "Portugal" : "Portuguese", "England" : "English"}
+
     # def encode_data(self, content):
     #     if content is not None:
     #         return content.encode("ISO-8859-1").decode("utf-8", "ignore")
@@ -37,7 +38,7 @@ class CrawlBase:
             script  = soup.find_all("script", {"type":"application/ld+json"})[1]
             data = json.loads(script.text)['itemListElement']
         except Exception as error:
-            print("An exception occurred:", error) 
+            logger.error(f'processing page {url}', error)
 
         return data
     
@@ -45,67 +46,55 @@ class CrawlBase:
     def page_details(self, url):
 
         data = {}
-        page = requests.get(url)
-        soup = BeautifulSoup(page.content, 'html.parser')
-        
-        data['imdb_url'] = soup.find('a', title='IMDb Rating').get('href')
 
-        urls = set()
-        for link in soup.findAll('a', href=re.compile("magnet")):
-            urls.add(link.get('href'))
+        try:
+            page = requests.get(url)
+            soup = BeautifulSoup(page.content, 'html.parser')
+        
+            data['imdb_url'] = soup.find('a', title='IMDb Rating').get('href')
+
+            urls = set()
+            for link in soup.findAll('a', href=re.compile("magnet")):
+                urls.add(link.get('href'))
        
-        items = list(urls)
-        try:
-            data["torrent_720"] = items[0]
-        except:
-            data["torrent_720"] = None
-        try:
-            data["torrent_1080"] = items[1]
-        except:
-            data["torrent_1080"] = None
+            items = list(urls)
+            try:
+                data["torrent_720"] = items[0]
+            except:
+                data["torrent_720"] = None
+            try:
+                data["torrent_1080"] = items[1]
+            except:
+                data["torrent_1080"] = None
+        except Exception as error:
+            logger.error(f'processing page details {url}', error)
         return data
     
     def page_imdb_details(self, url):
-        data = {}
-        soup = BeautifulSoup(self.download(url), 'html.parser')
-
-        try:
-            language = soup.find('a', href=re.compile("primary_language")).text
-        except:
-            language = None
-            print('error in processing language: ' + url)
-        try:
-            releaseDate = soup.find('a', href=re.compile("releaseinfo")).text
-        except:
-            print('error in processing release date: ' + url)
-        try:
-            countryOrigin = soup.find('a', href=re.compile("country_of_origin")).text
-        except:
-            countryOrigin = None
-            print('error in processing country of origin: ' + url)
-
-        #note: here if it fails for langiage country of origin can be taken
-        try:
-            if language is None and not countryOrigin is None:
-                language = self.countryLanguage[countryOrigin]
-        except:
-            print('error in mapping country to language: ' + url)
         
-        script  = soup.find_all("script", {"type":"application/ld+json"})[0]
-        data = json.loads(script.text)
-
         movie_data = {}
 
         try:
+            data = {}
+            soup = BeautifulSoup(self.download(url), 'html.parser')
+            language = soup.find('a', href=re.compile("primary_language")).text
+            releaseDate = soup.find('a', href=re.compile("releaseinfo")).text
+            countryOrigin = soup.find('a', href=re.compile("country_of_origin")).text
+        
+        
+            script  = soup.find_all("script", {"type":"application/ld+json"})[0]
+            data = json.loads(script.text)
+
+            movie_data = {}
             movie_data['description'] = data['description']
             movie_data['genre'] = data['genre']
             movie_data['imdb_rating'] = data['aggregateRating']['ratingValue']
             movie_data['releasedate'] = releaseDate
             movie_data['language'] = language
             movie_data['countryOrigin'] = countryOrigin
-        except:
-          movie_data = {}
-          print('failed to parse data ' + url)  
+        except Exception as error:
+          movie_data = None
+          logger.error(f'processing imdb data {url}', error)  
         return movie_data
 
 class Yts(CrawlBase):
@@ -123,6 +112,7 @@ class Yts(CrawlBase):
     def parse(self):
         for page_number in range(self.options["from"], self.options["to"] + 1):
             url = f"{self.base_url}?page={page_number}"
+            logger.info(url)   
             print(url)
             data = self.page(url)
 
@@ -132,8 +122,7 @@ class Yts(CrawlBase):
                 movie['title'] = item['item']['name']
                 movie['url'] = item['item']['url']
                 movie['image'] = item['item']['image']
-                #print(movie)
-
+                
                 rg = re.compile(r'[^a-z](\d{4})[^a-z]', re.IGNORECASE)
                 match = rg.findall(movie['title'])
 
@@ -143,11 +132,16 @@ class Yts(CrawlBase):
                 
                 if not skip_movie:
                   movie_data = self.page_details(movie['url'])
-                  imdb_data = self.page_imdb_details(movie_data['imdb_url'])
+                  if not movie_data:
+                    logger.error(f"no magnetic link {movie['url']}") 
+                    continue
+                  
                   movie["torrent_720"] = movie_data['torrent_720']
                   movie["torrent_1080"] = movie_data['torrent_1080']
 
+                  imdb_data = self.page_imdb_details(movie_data['imdb_url'])
                   if not imdb_data:
+                    logger.error(f"no imdb data {movie_data['imdb_url']}") 
                     continue
                   
                   movie['description'] = imdb_data['description']
@@ -169,8 +163,8 @@ class Yts(CrawlBase):
                             break
 
                 #imdb year
-                if not skip_movie and self.options["year_gt"] and int(movie["year"]) < int(self.options["year_gt"]):
-                    skip_movie = True
+                # if not skip_movie and self.options["year_gt"] and int(movie["year"]) < int(self.options["year_gt"]):
+                #     skip_movie = True
 
                 #imdb language
                 if not skip_movie and self.options["include_languages"]:
@@ -180,20 +174,27 @@ class Yts(CrawlBase):
                     
                 if not skip_movie:
                     self.movies[movie["title"]] = movie
+                    logger.info(movie["title"])  
                     print(movie["title"])
         return
   
     def get_movies(self):
         return self.movies
 
-yts = Yts("https://yts.rs/browse-movies/2023/all/all/5/latest", { "imdb_rating_gt": 5, "year_gt": 2023}) 
-yts.parse()
 
-movies = yts.get_movies()
-#print(movies)
+logging.basicConfig(filename='error.log', level=logging.ERROR, 
+                    format='%(asctime)s %(levelname)s %(name)s %(message)s')
+logger=logging.getLogger(__name__)
 
-# output 
-with open("Movies.json", 'wt') as f:
-    json.dump(movies, f)  
-# Closing file
-f.close()
+years = [2020] #2020, 2021, 2022, 2023
+for year in years:
+    yts = Yts(f"https://yts.rs/browse-movies/{year}/all/all/5/latest", {"from": 58 ,"to":150, "imdb_rating_gt": 5, "year_gt": year}) #"from":27,
+    yts.parse()
+
+    movies = yts.get_movies()
+
+    # output 
+    with open(f"Movies_{year}.json", 'wt') as f:
+        json.dump(movies, f)  
+    # Closing file
+    f.close()
