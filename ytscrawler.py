@@ -14,6 +14,7 @@ import logging
 
 class CrawlBase:
     def __init__(self, url):
+        self.countryLanguage = {"Argentina": "Spanish", "Spain" : "Spanish", "Italy" : "Italian", "United Kingdom":"English", "United States":"English", "USA" : "English", "Brazil" : "Portuguese", "Portugal" : "Portuguese", "England" : "English"}
         self.base_url = url
         self.http_options = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
@@ -71,24 +72,36 @@ class CrawlBase:
         return data
     
     def page_imdb_details(self, url):
-        
         movie_data = {}
 
         try:
             data = {}
             soup = BeautifulSoup(self.download(url), 'html.parser')
-            language = soup.find('a', href=re.compile("primary_language")).text
-            releaseDate = soup.find('a', href=re.compile("releaseinfo")).text
-            countryOrigin = soup.find('a', href=re.compile("country_of_origin")).text
-        
-        
+            
+            countryOrigin = soup.find('a', href=re.compile("country_of_origin"))
+            countryOrigin = countryOrigin.text if countryOrigin else None
+           
+            language = soup.find('a', href=re.compile("primary_language")) 
+            try:
+                language = language.text if language else self.countryLanguage.get(countryOrigin) 
+            except:
+                logger.error(f"country origin {countryOrigin}")
+            
+            releaseDate = soup.find('a', href=re.compile("releaseinfo"))
+            releaseDate = releaseDate.text if releaseDate else None
+            
             script  = soup.find_all("script", {"type":"application/ld+json"})[0]
             data = json.loads(script.text)
 
             movie_data = {}
-            movie_data['description'] = data['description']
-            movie_data['genre'] = data['genre']
-            movie_data['imdb_rating'] = data['aggregateRating']['ratingValue']
+            movie_data['description'] = data.get('description')
+            movie_data['genre'] = data.get('genre')
+            if movie_data.get('genre') is None:
+                if soup.find('title', text = re.compile("TV Special")):
+                    movie_data['genre'] = 'TV Special'
+                elif soup.find('title', text = re.compile("TV Movie")):
+                    movie_data['genre'] = 'TV Movie'
+            movie_data['imdb_rating'] = data.get('aggregateRating').get('ratingValue')
             movie_data['releasedate'] = releaseDate
             movie_data['language'] = language
             movie_data['countryOrigin'] = countryOrigin
@@ -111,8 +124,7 @@ class Yts(CrawlBase):
         self.options["include_languages"] = yts_options.get("include_languages", ["English", "Spanish", "Italian", "Portuguese"])
     def parse(self):
         for page_number in range(self.options["from"], self.options["to"] + 1):
-            url = f"{self.base_url}?page={page_number}"
-            logger.info(url)   
+            url = f"{self.base_url}?page={page_number}" 
             print(url)
             data = self.page(url)
 
@@ -127,8 +139,8 @@ class Yts(CrawlBase):
                 match = rg.findall(movie['title'])
 
                 #check release year from yts
-                if not skip_movie and self.options["year_gt"] and int(match[0]) < self.options["year_gt"]:
-                    skip_movie = True
+                # if not skip_movie and self.options["year_gt"] and int(match[0]) < self.options["year_gt"]:
+                #     skip_movie = True
                 
                 if not skip_movie:
                   movie_data = self.page_details(movie['url'])
@@ -157,14 +169,11 @@ class Yts(CrawlBase):
 
                 #imdb genres     
                 if not skip_movie and self.options["exclude_genres"] and isinstance(self.options["exclude_genres"], list):
-                    for genre in movie["genres"]:
-                        if genre in self.options["exclude_genres"]:
-                            skip_movie = True
-                            break
-
-                #imdb year
-                # if not skip_movie and self.options["year_gt"] and int(movie["year"]) < int(self.options["year_gt"]):
-                #     skip_movie = True
+                    if movie["genres"]:
+                        for genre in movie["genres"]:
+                            if genre in self.options["exclude_genres"]:
+                                skip_movie = True
+                                break
 
                 #imdb language
                 if not skip_movie and self.options["include_languages"]:
@@ -174,7 +183,6 @@ class Yts(CrawlBase):
                     
                 if not skip_movie:
                     self.movies[movie["title"]] = movie
-                    logger.info(movie["title"])  
                     print(movie["title"])
         return
   
@@ -182,16 +190,28 @@ class Yts(CrawlBase):
         return self.movies
 
 
-logging.basicConfig(filename='error.log', level=logging.ERROR, 
+logging.basicConfig(filename='error.log', level=logging.INFO, 
                     format='%(asctime)s %(levelname)s %(name)s %(message)s')
 logger=logging.getLogger(__name__)
 
-years = [2020] #2020, 2021, 2022, 2023
+years = [2020, 2021, 2022, 2023]
 for year in years:
-    yts = Yts(f"https://yts.rs/browse-movies/{year}/all/all/5/latest", {"to":150, "imdb_rating_gt": 5, "year_gt": year})
+    logger.info(f'---- Process movies for year {year}----');
+    # get the start time
+    st = time.time()
+    
+    yts = Yts(f"https://yts.rs/browse-movies/{year}/all/all/5/latest", {"to":150, "imdb_rating_gt": 5})
     yts.parse()
 
     movies = yts.get_movies()
+    
+    # get the end time
+    et = time.time()
+
+    # get the execution time
+    elapsed_time = et - st
+    logger.info(f"Execution time:{time.strftime('%H:%M:%S', time.gmtime(elapsed_time))}")
+    print('Execution time:', time.strftime("%H:%M:%S", time.gmtime(elapsed_time)))
 
     # output 
     with open(f"Movies_{year}.json", 'wt') as f:
