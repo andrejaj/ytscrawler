@@ -1,0 +1,7 @@
+###### Requirements without Version Specifiers ######
+requests
+beautifulsoup4
+urllib
+ssl
+regex
+logging
