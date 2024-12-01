@@ -39,12 +39,26 @@
             flex-direction: row;
             align-items: center;
             gap: 15px;
+            position: relative;
         }
         .movie img {
             border-radius: 8px;
             max-width: 120px;
             height: auto;
             cursor: pointer;
+        }
+        .ticker {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            width: 30px;
+            height: 30px;
+            background: url('https://upload.wikimedia.org/wikipedia/commons/7/73/Flat_tick_icon.svg') no-repeat center center;
+            background-size: contain;
+            display: none;
+        }
+        .selected .ticker {
+            display: block;
         }
         .movie-details {
             flex-grow: 1;
@@ -75,17 +89,30 @@
             margin-right: 5px;
             font-size: 12px;
         }
+        .email-section {
+            background: #fff;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <div id="dropArea" class="drop-area">Drag and drop a JSON file here</div>
         <div id="movieList"></div>
+        <div class="email-section">
+            <label for="email">Enter your email:</label>
+            <input type="email" id="email" placeholder="example@domain.com" required>
+            <button id="sendButton">Send Selected Movies</button>
+        </div>
     </div>
 
     <script>
         const dropArea = document.getElementById("dropArea");
         const movieList = document.getElementById("movieList");
+        const sendButton = document.getElementById("sendButton");
 
         // Highlight drop area when dragging over it
         dropArea.addEventListener("dragover", (event) => {
@@ -126,8 +153,12 @@
 
                 const movieElement = document.createElement("div");
                 movieElement.className = "movie";
+                movieElement.dataset.magnet = movie.torrent_720;
+                movieElement.dataset.title = movie.title;
+                movieElement.dataset.imdb = movie.imdb_url;
 
                 movieElement.innerHTML = `
+                    <div class="ticker"></div>
                     <a href="${movie.imdb_url}" target="_blank">
                         <img src="${movie.image}" alt="${movie.title}">
                     </a>
@@ -141,9 +172,34 @@
                     </div>
                 `;
 
+                movieElement.addEventListener("click", () => {
+                    movieElement.classList.toggle("selected");
+                });
+
                 movieList.appendChild(movieElement);
             }
         }
+
+        sendButton.addEventListener("click", () => {
+            const email = document.getElementById("email").value.trim();
+            if (!email) {
+                alert("Please enter a valid email address.");
+                return;
+            }
+
+            const selectedMovies = Array.from(document.querySelectorAll(".movie.selected"));
+            if (selectedMovies.length === 0) {
+                alert("Please select at least one movie.");
+                return;
+            }
+
+            const movieDetails = selectedMovies.map(movie => {
+                return `Title: ${movie.dataset.title}\nIMDB URL: ${movie.dataset.imdb}\nMagnet Link: ${movie.dataset.magnet}`;
+            });
+
+            const mailtoLink = `mailto:${email}?subject=Selected Movies&body=${encodeURIComponent(movieDetails.join("\n\n"))}`;
+            window.location.href = mailtoLink;
+        });
     </script>
 </body>
 </html>
