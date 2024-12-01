@@ -6,6 +6,7 @@ import ssl
 import re
 import json
 import logging
+from datetime import datetime
 
 #genres = ['Action', 'Adventure', 'Animation', 'Biography', 'Comedy', 'Crime',
 #          'Documentary', 'Drama', 'Family', 'Fantasy', 'Film Noir', 'History',
@@ -14,6 +15,7 @@ import logging
 
 class CrawlBase:
     def __init__(self, url):
+        self.visited_imdb = set()
         self.countryLanguage = {"Argentina": "Spanish", "Spain" : "Spanish", "Italy" : "Italian", "United Kingdom":"English", "United States":"English", "USA" : "English", "Brazil" : "Portuguese", "Portugal" : "Portuguese", "England" : "English"}
         self.base_url = url
         self.http_options = {
@@ -102,6 +104,7 @@ class CrawlBase:
                 elif soup.find('title', text = re.compile("TV Movie")):
                     movie_data['genre'] = 'TV Movie'
             movie_data['imdb_rating'] = data.get('aggregateRating').get('ratingValue')
+            movie_data['imdb_rating_count'] = data.get('aggregateRating').get('ratingCount')
             movie_data['releasedate'] = releaseDate
             movie_data['language'] = language
             movie_data['countryOrigin'] = countryOrigin
@@ -122,6 +125,20 @@ class Yts(CrawlBase):
         self.options["year_gt"] = yts_options.get("year_gt")
         self.options["exclude_genres"] = yts_options.get("exclude_genres", ["Documentary", "Romance", "Talk-Show", "Reality-TV", "News", "Musical", "Music", "Animation", "Western", "Short", "Sport", "TV Special"])
         self.options["include_languages"] = yts_options.get("include_languages", ["English", "Spanish", "Italian", "Portuguese"])
+    
+    def load_visited_imdb(self, visited_file="visited_imdb.json"):
+        """Load the visited IMDb list from a file."""
+        try:
+            with open(visited_file, 'rt') as f:
+                self.visited_imdb = set(json.load(f))
+        except FileNotFoundError:
+            print("No visited list found, starting fresh.")
+    
+    def save_visited_imdb(self, visited_file="visited_imdb.json"):
+        """Save the visited IMDb list to a file."""
+        with open(visited_file, 'at') as f:
+            json.dump(list(self.visited_imdb), f)
+    
     def parse(self):
         for page_number in range(self.options["from"], self.options["to"] + 1):
             url = f"{self.base_url}?page={page_number}" 
@@ -134,6 +151,11 @@ class Yts(CrawlBase):
                 movie['title'] = item['item']['name']
                 movie['url'] = item['item']['url']
                 movie['image'] = item['item']['image']
+
+                imdb_url = movie['url']  # Assuming imdb URL is included in the movie data
+                if imdb_url in self.visited_imdb:
+                    logger.log(f"Skipping {movie['title']} - already visited.")
+                    continue
                 
                 rg = re.compile(r'[^a-z](\d{4})[^a-z]', re.IGNORECASE)
                 match = rg.findall(movie['title'])
@@ -155,6 +177,13 @@ class Yts(CrawlBase):
                   if not imdb_data:
                     logger.error(f"no imdb data {movie_data['imdb_url']}") 
                     continue
+                  
+                  if imdb_data['imdb_rating_count'] < 1000:
+                      logger.warning(f"{movie_data['imdb_url']} - rating count: {imdb_data['imdb_rating_count']}") 
+                      continue
+                  
+                  # Save visited IMDb after processing
+                  self.visited_imdb.add(movie_data['imdb_url'])
                   
                   movie['description'] = imdb_data['description']
                   movie['genres'] = imdb_data['genre']
@@ -184,37 +213,44 @@ class Yts(CrawlBase):
                 if not skip_movie:
                     self.movies[movie["title"]] = movie
                     print(movie["title"])
+
+        self.save_visited_imdb()
         return
   
     def get_movies(self):
         return self.movies
 
 
-logging.basicConfig(filename='error.log', level=logging.INFO, 
+logging.basicConfig(filename='logger.log', level=logging.INFO, 
                     format='%(asctime)s %(levelname)s %(name)s %(message)s')
 logger=logging.getLogger(__name__)
 
 years = [2020, 2021, 2022, 2023]
 for year in years:
-    logger.info(f'---- Process movies for year {year}----');
-    # get the start time
-    st = time.time()
+    try:
+        logger.info(f'---- Process movies for year {year}----');
+        # get the start time
+        st = time.time()
     
-    yts = Yts(f"https://yts.rs/browse-movies/{year}/all/all/5/latest", {"to":150, "imdb_rating_gt": 5})
-    yts.parse()
+        yts = Yts(f"https://yts.rs/browse-movies/{year}/all/all/5/latest", {"to":150, "imdb_rating_gt": 5})
+        yts.parse()
 
-    movies = yts.get_movies()
+        movies = yts.get_movies()
     
-    # get the end time
-    et = time.time()
+        # get the end time
+        et = time.time()
 
-    # get the execution time
-    elapsed_time = et - st
-    logger.info(f"Execution time:{time.strftime('%H:%M:%S', time.gmtime(elapsed_time))}")
-    print('Execution time:', time.strftime("%H:%M:%S", time.gmtime(elapsed_time)))
+        # get the execution time
+        elapsed_time = et - st
+        logger.info(f"Execution time:{time.strftime('%H:%M:%S', time.gmtime(elapsed_time))}")
+        print('Execution time:', time.strftime("%H:%M:%S", time.gmtime(elapsed_time)))
 
-    # output 
-    with open(f"Movies_{year}.json", 'wt') as f:
-        json.dump(movies, f)  
-    # Closing file
-    f.close()
+        current_time = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        file_name = f"Movies_{year}_{current_time}.json"
+    
+        # output 
+        with open(file_name, 'wt') as f:
+            json.dump(movies, f)
+        f.close()
+    except Exception as ex:
+        logger.error(ex)
