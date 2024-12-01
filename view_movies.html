@@ -52,7 +52,11 @@
         .movie-title {
             font-size: 18px;
             margin: 0;
-            color: #333;
+            color: #007BFF;
+            text-decoration: none;
+        }
+        .movie-title:hover {
+            text-decoration: underline;
         }
         .movie-meta {
             margin: 5px 0;
@@ -124,11 +128,11 @@
                 movieElement.className = "movie";
 
                 movieElement.innerHTML = `
-                    <a href="${movie.torrent_720}" target="_blank">
+                    <a href="${movie.imdb_url}" target="_blank">
                         <img src="${movie.image}" alt="${movie.title}">
                     </a>
                     <div class="movie-details">
-                        <h2 class="movie-title">${movie.title}</h2>
+                        <a href="${movie.torrent_720}" target="_blank" class="movie-title">${movie.title}</a>
                         <p class="movie-meta">IMDB Rating: ${movie.imdb_rating} | Year: ${movie.year} | Language: ${movie.language}</p>
                         <p class="movie-description">${movie.description}</p>
                         <div class="genres">
