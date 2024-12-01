@@ -191,6 +191,7 @@ class Yts(CrawlBase):
                   movie['year'] = imdb_data['releasedate']
                   movie['language'] = imdb_data['language']
                   movie['countryOrigin'] = imdb_data['countryOrigin']
+                  movie['imdb_url'] = movie_data['imdb_url']
                   
                 #imdb rating  
                 if not skip_movie and self.options["imdb_rating_gt"] and movie["imdb_rating"] < float(self.options["imdb_rating_gt"]):
