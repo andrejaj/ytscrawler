@@ -178,7 +178,7 @@ class Yts(CrawlBase):
                     logger.error(f"no imdb data {movie_data['imdb_url']}") 
                     continue
                   
-                  if imdb_data['imdb_rating_count'] < 1000:
+                  if imdb_data['imdb_rating_count'] < 2000:
                       logger.warning(f"{movie_data['imdb_url']} - rating count: {imdb_data['imdb_rating_count']}") 
                       continue
                   
